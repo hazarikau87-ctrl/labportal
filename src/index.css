@@ -1,3 +1,28 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@media print {
+  /* Hide everything by default */
+  body * {
+    visibility: hidden;
+  }
+  
+  /* Show only the receipt container and its children */
+  #printable-receipt, #printable-receipt * {
+    visibility: visible;
+  }
+
+  /* Position the receipt at the very top-left of the printed page */
+  #printable-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+
+  /* Hide the action buttons during print */
+  [data-html2canvas-ignore="true"] {
+    display: none !important;
+  }
+}

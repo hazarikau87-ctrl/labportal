@@ -1,20 +1,13 @@
 import { useRef, useEffect, useState } from 'react';
 import { ChevronDown, X } from 'lucide-react';
 
-export const TEST_OPTIONS = [
-  'Full Body Checkup',
-  'CBC / Blood Test',
-  'Diabetes Screen',
-  'Thyroid Profile',
-  'Prescribed (Upload Below)',
-];
-
 interface TestSelectorProps {
   selected: string[];
   onChange: (values: string[]) => void;
+  options: string[]; // Added this to receive the lab-specific list
 }
 
-export default function TestSelector({ selected, onChange }: TestSelectorProps) {
+export default function TestSelector({ selected, onChange, options }: TestSelectorProps) {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -69,20 +62,25 @@ export default function TestSelector({ selected, onChange }: TestSelectorProps) 
 
       {open && (
         <div className="absolute top-[105%] left-0 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-52 overflow-y-auto p-2">
-          {TEST_OPTIONS.map((option) => (
-            <label
-              key={option}
-              className="flex items-center gap-2.5 px-2 py-2 rounded-md cursor-pointer hover:bg-green-50 transition-colors"
-            >
-              <input
-                type="checkbox"
-                checked={selected.includes(option)}
-                onChange={() => toggle(option)}
-                className="w-4 h-4 accent-green-700"
-              />
-              <span className="text-sm text-gray-700">{option}</span>
-            </label>
-          ))}
+          {/* We now map through the dynamic 'options' prop instead of the hardcoded array */}
+          {options && options.length > 0 ? (
+            options.map((option) => (
+              <label
+                key={option}
+                className="flex items-center gap-2.5 px-2 py-2 rounded-md cursor-pointer hover:bg-green-50 transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.includes(option)}
+                  onChange={() => toggle(option)}
+                  className="w-4 h-4 accent-green-700"
+                />
+                <span className="text-sm text-gray-700">{option}</span>
+              </label>
+            ))
+          ) : (
+            <div className="p-2 text-xs text-gray-400 italic">No tests available</div>
+          )}
         </div>
       )}
     </div>

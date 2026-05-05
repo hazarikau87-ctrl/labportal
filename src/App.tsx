@@ -1,8 +1,8 @@
 import html2pdf from 'html2pdf.js';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { User, Smartphone, Mail, Upload, Calendar, Clock } from 'lucide-react';
+import { useParams } from 'react-router-dom'; // Added for dynamic routing
 import { supabase } from './lib/supabase';
-import { labConfig } from './config/labs';
 import {
   getLocalDate,
   getUserIP,
@@ -21,8 +21,14 @@ const TIME_SLOTS = [
 ];
 
 interface LabSettings {
+  id: string;
   lab_name: string;
   phone_number: string | null;
+  whatsapp_number: string | null;
+  logo_url: string | null;
+  tagline: string | null;
+  available_tests: string[]; // Added
+  operating_hours: string[]; // Added
 }
 
 interface BookingResult {
@@ -33,9 +39,10 @@ interface BookingResult {
 }
 
 export default function App() {
+  const { labSlug } = useParams(); // Capture the slug from URL
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const [labSettings, setLabSettings] = useState<LabSettings>({ lab_name: 'City Diagnostic Center', phone_number: null });
+  const [labSettings, setLabSettings] = useState<LabSettings | null>(null); // Initialized as null
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
@@ -53,23 +60,28 @@ export default function App() {
   const [success, setSuccess] = useState<BookingResult | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Fetch Lab Details based on Slug
   useEffect(() => {
+    if (!labSlug) return;
+
     supabase
       .from('labs')
-      .select('lab_name, phone_number')
-      .eq('id', labConfig.id)
+      .select('id, lab_name, phone_number, whatsapp_number, logo_url, tagline, available_tests, operating_hours')
+      .eq('slug', labSlug) // Dynamically find the lab by its unique slug
       .maybeSingle()
       .then(({ data }) => {
         if (data) setLabSettings(data as LabSettings);
       });
-  }, []);
+  }, [labSlug]);
 
   const getAvailableSlots = useCallback(() => {
-    return TIME_SLOTS.map((slot) => ({
-      value: slot,
-      disabled: isSlotDisabled(slot, date),
-    }));
-  }, [date]);
+  // Use lab-specific hours, fallback to empty array if loading
+  const slotsToUse = labSettings?.operating_hours || [];
+  return slotsToUse.map((slot) => ({
+    value: slot,
+    disabled: isSlotDisabled(slot, date),
+  }));
+}, [date, labSettings]);
 
   function validate() {
     const errs: Record<string, string> = {};
@@ -88,6 +100,8 @@ export default function App() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!labSettings) return; // Guard clause
+
     const errs = validate();
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
@@ -95,7 +109,9 @@ export default function App() {
     setSubmitting(true);
     const bookingId = generateBookingId(name);
     const testNames = selectedTests.join(', ');
-    const labSlug = labSettings.lab_name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+    
+    // Create folder path using the fetched Lab ID to keep storage organized
+    const labFolder = labSettings.id;
 
     try {
       const userIP = await getUserIP();
@@ -107,7 +123,9 @@ export default function App() {
           ? await compressImage(prescriptionFile)
           : prescriptionFile;
         const fileExt = prescriptionFile.type === 'application/pdf' ? 'pdf' : 'jpg';
-        savedFilePath = `${labSlug}_${labConfig.id}/${bookingId}.${fileExt}`;
+        
+        // Save prescription in the lab's specific folder
+        savedFilePath = `${labFolder}/${bookingId}.${fileExt}`;
         const { error: uploadError } = await supabase.storage
           .from('prescriptions')
           .upload(savedFilePath, uploadBlob);
@@ -125,12 +143,12 @@ export default function App() {
         time: timeSlot,
         test: testNames,
         booking_id: bookingId,
-        lab_id: labConfig.id,
+        lab_id: labSettings.id, // Use ID from fetched settings
         prescription_url: savedFilePath,
       };
 
       const consentData = {
-        lab_id: labConfig.id,
+        lab_id: labSettings.id, // Use ID from fetched settings
         booking_id: bookingId,
         patient_name: name,
         consent_text: TERMS_TEXT,
@@ -175,31 +193,33 @@ export default function App() {
   }
 
   function handleDownload() {
-  if (!success) return;
-  const element = document.getElementById('printable-receipt');
-  if (!element) return;
+    if (!success) return;
+    const element = document.getElementById('printable-receipt');
+    if (!element) return;
 
-  const opt = {
-    margin: [10, 10, 10, 10],
-    filename: `Receipt_${success.bookingId}.pdf`,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { 
-      scale: 2, 
-      useCORS: true,
-      letterRendering: true,
-      // We remove scrollY: 0 and instead ensure the element is treated as a full-height block
-      windowWidth: element.scrollWidth,
-      windowHeight: element.scrollHeight,
-    },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-  };
+    const opt = {
+      margin: [10, 10, 10, 10],
+      filename: `Receipt_${success.bookingId}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { 
+        scale: 2, 
+        useCORS: true,
+        letterRendering: true,
+        windowWidth: element.scrollWidth,
+      },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
 
-  // Create a worker instance to handle the "cloning" logic
-  const worker = html2pdf().set(opt).from(element).toPdf().get('pdf').then((pdf) => {
-    // This ensures the PDF is saved
-    pdf.save();
-  });
-}
+    html2pdf().set(opt).from(element).save();
+  }
+
+  if (!labSettings) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-gray-500 animate-pulse">Loading Laboratory Portal...</p>
+      </div>
+    );
+  }
 
   const slots = getAvailableSlots();
   const fieldCls = (key: string) =>
@@ -212,7 +232,12 @@ export default function App() {
       <div className="w-full max-w-[480px] bg-white rounded-none sm:rounded-2xl shadow-none sm:shadow-2xl flex flex-col h-screen sm:h-[92vh] overflow-hidden">
         
         <div id="printable-receipt" className="flex flex-col flex-1 overflow-y-auto bg-white">
-          <Header labName={labSettings.lab_name} phoneNumber={labSettings.phone_number} />
+          <Header 
+           labName={labSettings.lab_name} 
+           phoneNumber={labSettings.phone_number}
+           logoUrl={labSettings.logo_url} 
+           tagline={labSettings.tagline}
+           />
 
           <div ref={scrollRef} className="px-5 py-4">
             {success ? (
@@ -221,6 +246,7 @@ export default function App() {
                 name={success.name}
                 tests={success.tests}
                 dateTime={success.dateTime}
+                phoneNumber={labSettings.whatsapp_number || labSettings.phone_number}
                 onReset={handleReset}
                 onDownload={handleDownload}
               />
@@ -228,10 +254,13 @@ export default function App() {
               <form onSubmit={handleSubmit} noValidate>
                 {/* Full Name */}
                 <div className="mb-3">
-                  <label className="block text-xs font-medium text-blue-900 mb-1">Full Name *</label>
+                  <label htmlFor="patient_name" className="block text-xs font-medium text-blue-900 mb-1">Full Name *</label>
                   <div className="relative">
                     <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-green-700 pointer-events-none" />
                     <input
+                      id="patient_name"
+                      name="name"
+                      autoComplete="name"
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
@@ -245,18 +274,36 @@ export default function App() {
                 {/* Mobile + WhatsApp */}
                 <div className="flex gap-2.5 mb-1">
                   <div className="flex-1">
-                    <label className="block text-xs font-medium text-blue-900 mb-1">Mobile *</label>
+                    <label htmlFor="mobile_no" className="block text-xs font-medium text-blue-900 mb-1">Mobile *</label>
                     <div className="relative">
                       <Smartphone size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-green-700 pointer-events-none" />
-                      <input type="tel" value={mobile} onChange={(e) => setMobile(e.target.value)} placeholder="10-digit" className={`${fieldCls('mobile')} pl-9`} />
+                      <input 
+                        id="mobile_no"
+                        name="tel"
+                        autoComplete="tel"
+                        type="tel" 
+                        value={mobile} 
+                        onChange={(e) => setMobile(e.target.value)} 
+                        placeholder="10-digit" 
+                        className={`${fieldCls('mobile')} pl-9`} 
+                      />
                     </div>
                     {errors.mobile && <p className="text-red-500 text-xs mt-0.5">{errors.mobile}</p>}
                   </div>
                   <div className="flex-1">
-                    <label className="block text-xs font-medium text-blue-900 mb-1">WhatsApp *</label>
+                    <label htmlFor="whatsapp_no" className="block text-xs font-medium text-blue-900 mb-1">WhatsApp *</label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#25D366] text-[10px] font-bold pointer-events-none">WA</span>
-                      <input type="tel" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="Number" className={`${fieldCls('whatsapp')} pl-9`} />
+                      <input 
+                        id="whatsapp_no"
+                        name="whatsapp"
+                        autoComplete="off"
+                        type="tel" 
+                        value={whatsapp} 
+                        onChange={(e) => setWhatsapp(e.target.value)} 
+                        placeholder="Number" 
+                        className={`${fieldCls('whatsapp')} pl-9`} 
+                      />
                     </div>
                     {errors.whatsapp && <p className="text-red-500 text-xs mt-0.5">{errors.whatsapp}</p>}
                   </div>
@@ -267,23 +314,46 @@ export default function App() {
 
                 {/* Email */}
                 <div className="mb-3">
-                  <label className="block text-xs font-medium text-blue-900 mb-1">Email Address (Optional)</label>
+                  <label htmlFor="email_address" className="block text-xs font-medium text-blue-900 mb-1">Email Address (Optional)</label>
                   <div className="relative">
                     <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-green-700 pointer-events-none" />
-                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="example@gmail.com" className={`${fieldCls('email')} pl-9`} />
+                    <input 
+                      id="email_address"
+                      name="email"
+                      autoComplete="email"
+                      type="email" 
+                      value={email} 
+                      onChange={(e) => setEmail(e.target.value)} 
+                      placeholder="example@gmail.com" 
+                      className={`${fieldCls('email')} pl-9`} 
+                    />
                   </div>
                 </div>
 
                 {/* Age + Gender */}
                 <div className="flex gap-2.5 mb-3">
                   <div className="flex-1">
-                    <label className="block text-xs font-medium text-blue-900 mb-1">Age *</label>
-                    <input type="number" value={age} onChange={(e) => setAge(e.target.value)} placeholder="Years" className={fieldCls('age')} />
+                    <label htmlFor="patient_age" className="block text-xs font-medium text-blue-900 mb-1">Age *</label>
+                    <input 
+                      id="patient_age"
+                      name="age"
+                      type="number" 
+                      value={age} 
+                      onChange={(e) => setAge(e.target.value)} 
+                      placeholder="Years" 
+                      className={fieldCls('age')} 
+                    />
                     {errors.age && <p className="text-red-500 text-xs mt-0.5">{errors.age}</p>}
                   </div>
                   <div className="flex-1">
-                    <label className="block text-xs font-medium text-blue-900 mb-1">Gender *</label>
-                    <select value={gender} onChange={(e) => setGender(e.target.value)} className={fieldCls('gender')}>
+                    <label htmlFor="patient_gender" className="block text-xs font-medium text-blue-900 mb-1">Gender *</label>
+                    <select 
+                      id="patient_gender"
+                      name="gender"
+                      value={gender} 
+                      onChange={(e) => setGender(e.target.value)} 
+                      className={fieldCls('gender')}
+                    >
                       <option value="">Select</option>
                       <option>Male</option>
                       <option>Female</option>
@@ -296,8 +366,11 @@ export default function App() {
                 {/* Tests */}
                 <div className="mb-3">
                   <label className="block text-xs font-medium text-blue-900 mb-1">Select Test(s) *</label>
-                  <TestSelector selected={selectedTests} onChange={setSelectedTests} />
-                  {errors.tests && <p className="text-red-500 text-xs mt-0.5">{errors.tests}</p>}
+                  <TestSelector 
+                    selected={selectedTests} 
+                    onChange={setSelectedTests} 
+                    options={[...(labSettings?.available_tests || []), "Prescribed (Upload Below)"]} 
+                    />
                 </div>
 
                 {/* Prescription */}
@@ -313,18 +386,32 @@ export default function App() {
                 {/* Date + Time */}
                 <div className="flex gap-2.5 mb-3">
                   <div className="flex-1">
-                    <label className="block text-xs font-medium text-blue-900 mb-1">Date *</label>
+                    <label htmlFor="appt_date" className="block text-xs font-medium text-blue-900 mb-1">Date *</label>
                     <div className="relative">
                       <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-green-700 pointer-events-none" />
-                      <input type="date" value={date} min={getLocalDate()} onChange={(e) => { setDate(e.target.value); setTimeSlot(''); }} className={`${fieldCls('date')} pl-9`} />
+                      <input 
+                        id="appt_date"
+                        name="date"
+                        type="date" 
+                        value={date} 
+                        min={getLocalDate()} 
+                        onChange={(e) => { setDate(e.target.value); setTimeSlot(''); }} 
+                        className={`${fieldCls('date')} pl-9`} 
+                      />
                     </div>
                     {errors.date && <p className="text-red-500 text-xs mt-0.5">{errors.date}</p>}
                   </div>
                   <div className="flex-1">
-                    <label className="block text-xs font-medium text-blue-900 mb-1">Time *</label>
+                    <label htmlFor="appt_time" className="block text-xs font-medium text-blue-900 mb-1">Time *</label>
                     <div className="relative">
                       <Clock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-green-700 pointer-events-none" />
-                      <select value={timeSlot} onChange={(e) => setTimeSlot(e.target.value)} className={`${fieldCls('time')} pl-9`}>
+                      <select 
+                        id="appt_time"
+                        name="time"
+                        value={timeSlot} 
+                        onChange={(e) => setTimeSlot(e.target.value)} 
+                        className={`${fieldCls('time')} pl-9`}
+                      >
                         <option value="">Select</option>
                         {slots.map(({ value, disabled }) => (
                           <option key={value} value={value} disabled={disabled}>{value}</option>
