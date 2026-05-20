@@ -162,7 +162,7 @@ export default function App() {
     }
   };
 
-  async function handleSubmit(e: React.FormEvent) {
+async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!labSettings) return;
 
@@ -172,7 +172,6 @@ export default function App() {
 
     setSubmitting(true);
     
-    // Safety check for db_id before finalizing
     let currentDbId = formData.db_id;
     if (!currentDbId) {
       currentDbId = await handleNext();
@@ -183,7 +182,8 @@ export default function App() {
       }
     }
 
-    const bookingId = generateBookingId(formData.name);
+    // Generate clean, final values
+    const finalBookingId = generateBookingId(formData.name);
     const testNames = formData.selectedTests.join(', ');
 
     try {
@@ -197,7 +197,7 @@ export default function App() {
           : formData.prescriptionFile;
         
         const fileExt = formData.prescriptionFile.type === 'application/pdf' ? 'pdf' : 'jpg';
-        savedFilePath = `${labSettings.id}/${bookingId}.${fileExt}`;
+        savedFilePath = `${labSettings.id}/${finalBookingId}.${fileExt}`;
         
         const { error: uploadError } = await supabase.storage
           .from('prescriptions')
@@ -208,14 +208,14 @@ export default function App() {
 
       setBtnLabel('Finalizing...');
 
-      // UPDATE using the numeric ID string to ensure bigint compatibility
+      // 1. UPDATE the appointment details first
       const { error: dbError } = await supabase
         .from('appointments')
         .update({
           appointment_date: formData.date,
           time: formData.timeSlot,
           test: testNames,
-          booking_id: bookingId,
+          booking_id: finalBookingId, // Upgraded cleanly from LEAD- string
           prescription_url: savedFilePath,
           status: 'Confirmed'
         })
@@ -223,10 +223,10 @@ export default function App() {
 
       if (dbError) throw dbError;
 
-      // Log Consent
-      await supabase.from('consent_logs').insert([{
+      // 2. Log Consent using the updated, safe booking ID matching the row state
+      const { error: consentError } = await supabase.from('consent_logs').insert([{
         lab_id: labSettings.id,
-        booking_id: bookingId,
+        booking_id: finalBookingId,
         patient_name: formData.name,
         consent_text: TERMS_TEXT,
         consent_given: formData.termsChecked,
@@ -235,7 +235,9 @@ export default function App() {
         consent_version: 'v1.0',
       }]);
 
-      // Trigger Email
+      if (consentError) console.error("Consent log failed silently:", consentError);
+
+      // 3. Trigger Email Edge Function
       await supabase.functions.invoke('send-booking-email', {
         body: { 
           name: formData.name,
@@ -245,12 +247,12 @@ export default function App() {
           appointment_date: formData.date,
           time: formData.timeSlot,
           test_name: testNames,
-          booking_id: bookingId 
+          booking_id: finalBookingId 
         },
       });
 
       setSuccess({ 
-        bookingId, 
+        bookingId: finalBookingId, 
         name: formData.name, 
         tests: testNames, 
         dateTime: `${formData.date} at ${formData.timeSlot}` 
