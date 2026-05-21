@@ -147,7 +147,6 @@ export default function App() {
           appointment_date: getLocalDate(),
           time: 'TBD'
         }])
-        .select('id');
 
       if (error) throw error;
       if (data && data.length > 0) {
@@ -219,7 +218,7 @@ async function handleSubmit(e: React.FormEvent) {
           prescription_url: savedFilePath,
           status: 'Confirmed'
         })
-        .eq('id', currentDbId);
+        .eq('booking_id', currentDbId);
 
       if (dbError) throw dbError;
 
