@@ -216,6 +216,7 @@ export default function App() {
           time: formData.timeSlot,
           test: testNames,
           booking_id: finalBookingId,
+          prescription_url: savedFilePath,
           status: 'Confirmed'
         })
         .eq('mobile', formData.mobile) // Targets the row safely using the client's phone number instead!
