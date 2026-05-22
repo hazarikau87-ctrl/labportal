@@ -215,11 +215,11 @@ export default function App() {
           appointment_date: formData.date,
           time: formData.timeSlot,
           test: testNames,
-          booking_id: finalBookingId, 
-          prescription_url: savedFilePath,
+          booking_id: finalBookingId,
           status: 'Confirmed'
         })
-        .eq('booking_id', activeToken); // Perfectly matches policy evaluation logic
+        .eq('mobile', formData.mobile) // Targets the row safely using the client's phone number instead!
+        .eq('test', 'LEAD_PENDING'); // Perfectly matches policy evaluation logic
 
       if (dbError) throw dbError;
 
