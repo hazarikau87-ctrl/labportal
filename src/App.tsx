@@ -46,7 +46,7 @@ export default function App() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const [formData, setFormData] = useState({
-    db_id: null as number | null,
+    current_lead_token: null as string | null, // Track by secure string token matching RLS policies
     name: '',
     mobile: '',
     whatsapp: '',
@@ -124,15 +124,18 @@ export default function App() {
     return errs;
   }
 
-  // Optimized handleNext with better error logging
+  // Optimized to work blindly with secure Row Level Security policies
   const handleNext = async () => {
-    if (formData.db_id) return formData.db_id;
+    if (formData.current_lead_token) return formData.current_lead_token;
 
     const patientAge = parseInt(formData.age);
     if (isNaN(patientAge) || !labSettings?.id) return null;
 
+    // Generate token cleanly ahead of request to track state reliably
+    const uniqueToken = `LEAD-${Math.random().toString(36).substr(2, 9)}`;
+
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('appointments')
         .insert([{
           name: formData.name,
@@ -141,27 +144,24 @@ export default function App() {
           email: formData.email || null,
           age: patientAge,
           gender: formData.gender,
-          lab_id: labSettings.id, // This is the UUID
+          lab_id: labSettings.id, 
           test: 'LEAD_PENDING',
-          booking_id: `LEAD-${Math.random().toString(36).substr(2, 9)}`,
+          booking_id: uniqueToken,
           appointment_date: getLocalDate(),
           time: 'TBD'
-        }])
+        }]);
 
       if (error) throw error;
-      if (data && data.length > 0) {
-        const newId = data[0].id;
-        setFormData(prev => ({ ...prev, db_id: newId }));
-        return newId;
-      }
-      return null;
+      
+      setFormData(prev => ({ ...prev, current_lead_token: uniqueToken }));
+      return uniqueToken;
     } catch (err) {
       console.error("Critical Lead capture failed:", err);
       return null;
     }
   };
 
-async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!labSettings) return;
 
@@ -171,10 +171,10 @@ async function handleSubmit(e: React.FormEvent) {
 
     setSubmitting(true);
     
-    let currentDbId = formData.db_id;
-    if (!currentDbId) {
-      currentDbId = await handleNext();
-      if (!currentDbId) {
+    let activeToken = formData.current_lead_token;
+    if (!activeToken) {
+      activeToken = await handleNext();
+      if (!activeToken) {
         setSubmitting(false);
         alert("Database connection failed. Please try again in a moment.");
         return;
@@ -207,22 +207,22 @@ async function handleSubmit(e: React.FormEvent) {
 
       setBtnLabel('Finalizing...');
 
-      // 1. UPDATE the appointment details first
+      // 1. UPDATE the unique lead row targeting its token value
       const { error: dbError } = await supabase
         .from('appointments')
         .update({
           appointment_date: formData.date,
           time: formData.timeSlot,
           test: testNames,
-          booking_id: finalBookingId, // Upgraded cleanly from LEAD- string
+          booking_id: finalBookingId, 
           prescription_url: savedFilePath,
           status: 'Confirmed'
         })
-        .eq('booking_id', currentDbId);
+        .eq('booking_id', activeToken); // Perfectly matches policy evaluation logic
 
       if (dbError) throw dbError;
 
-      // 2. Log Consent using the updated, safe booking ID matching the row state
+      // 2. Log Consent safely matching new state configuration
       const { error: consentError } = await supabase.from('consent_logs').insert([{
         lab_id: labSettings.id,
         booking_id: finalBookingId,
@@ -269,7 +269,7 @@ async function handleSubmit(e: React.FormEvent) {
 
   const handleReset = () => {
     setFormData({
-      db_id: null,
+      current_lead_token: null,
       name: '', mobile: '', whatsapp: '', email: '',
       age: '', gender: '', selectedTests: [],
       prescriptionFile: null, date: getLocalDate(),
