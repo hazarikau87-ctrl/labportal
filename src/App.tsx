@@ -124,18 +124,15 @@ export default function App() {
     return errs;
   }
 
-  // Optimized to work blindly with secure Row Level Security policies
   const handleNext = async () => {
     if (formData.current_lead_token) return formData.current_lead_token;
 
     const patientAge = parseInt(formData.age);
     if (isNaN(patientAge) || !labSettings?.id) return null;
 
-    // Generate token cleanly ahead of request to track state reliably
     const uniqueToken = `LEAD-${Math.random().toString(36).substr(2, 9)}`;
 
     try {
-      // The fixed configuration payload using a metadata execution flag
       const { error } = await supabase
         .from('appointments')
         .insert([{
@@ -150,7 +147,7 @@ export default function App() {
           booking_id: uniqueToken,
           appointment_date: getLocalDate(),
           time: 'TBD'
-        }], { count: 'planned' }); // Bypasses client-side SELECT authorization requirement
+        }]);
 
       if (error) throw error;
       
@@ -182,7 +179,6 @@ export default function App() {
       }
     }
 
-    // Generate clean, final values
     const finalBookingId = generateBookingId(formData.name);
     const testNames = formData.selectedTests.join(', ');
 
@@ -208,7 +204,7 @@ export default function App() {
 
       setBtnLabel('Finalizing...');
 
-      // 1. UPDATE the unique lead row targeting its token value
+      // 1. UPDATE targeting the unique tracking token generated during Step 1
       const { error: dbError } = await supabase
         .from('appointments')
         .update({
@@ -219,8 +215,7 @@ export default function App() {
           prescription_url: savedFilePath,
           status: 'Confirmed'
         })
-        .eq('mobile', formData.mobile) // Targets the row safely using the client's phone number instead!
-        .eq('test', 'LEAD_PENDING'); // Perfectly matches policy evaluation logic
+        .eq('booking_id', activeToken); // Direct, unique identifier hook
 
       if (dbError) throw dbError;
 
