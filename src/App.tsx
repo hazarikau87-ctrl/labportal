@@ -242,7 +242,7 @@ export default function App() {
           email: formData.email,
           appointment_date: formData.date,
           time: formData.timeSlot,
-          test_name: testNames,
+          test: testNames,
           booking_id: finalBookingId 
         },
       });
