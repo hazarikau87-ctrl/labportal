@@ -234,22 +234,21 @@ export default function App() {
       if (consentError) console.error("Consent log failed silently:", consentError);
 
       // 3. Trigger Email Edge Function
-      // 3. Trigger Email Edge Function
-await supabase.functions.invoke('send-booking-email', {
-  body: { 
-    patient_name: formData.name,       // ✨ Fixed to match edge function
-    mobile: formData.mobile,
-    whatsapp: formData.whatsapp || formData.mobile,
-    email: formData.email,
-    appointment_date: `${formData.date} at ${formData.timeSlot}`, // Combined for your template
-    time: formData.timeSlot,
-    test_name: testNames,              // ✨ Fixed to match edge function
-    booking_id: finalBookingId,
-    lab_id: labSettings.id,            // ✨ Added: Crucial for your database query!
-    age: parseInt(formData.age),
-    gender: formData.gender
-  },
-});
+      await supabase.functions.invoke('send-booking-email', {
+        body: { 
+          patient_name: formData.name,       // ✨ Fixed to match edge function
+          mobile: formData.mobile,
+          whatsapp: formData.whatsapp || formData.mobile,
+          email: formData.email,
+          appointment_date: `${formData.date} at ${formData.timeSlot}`, // Combined for your template
+          time: formData.timeSlot,
+          test: testNames,              // ✨ Fixed to match edge function
+          booking_id: finalBookingId,
+          lab_id: labSettings.id,            // ✨ Added: Crucial for your database query!
+          age: parseInt(formData.age),
+          gender: formData.gender
+        },
+      });
 
       setSuccess({ 
         bookingId: finalBookingId, 
@@ -303,10 +302,13 @@ await supabase.functions.invoke('send-booking-email', {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-white flex justify-center items-center p-0 sm:p-4">
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-white flex justify-center items-start sm:items-center p-0 sm:p-4">
+    <div className="min-h-screen w-full bg-gradient-to-br from-green-50 to-white flex flex-col justify-start items-center p-0 sm:p-6">
+      
+      {/* Central Form Container Card */}
+      <div className="w-full max-w-md bg-white sm:my-4 sm:rounded-3xl sm:shadow-xl sm:border sm:border-gray-100 flex flex-col overflow-hidden">
         
-        <div id="printable-receipt" className="flex flex-col flex-1 overflow-y-auto bg-white">
+        {/* Printable/Receipt Content Area */}
+        <div id="printable-receipt" className="w-full flex flex-col bg-white">
           <Header 
             labName={labSettings.lab_name} 
             phoneNumber={labSettings.phone_number} 
@@ -343,8 +345,9 @@ await supabase.functions.invoke('send-booking-email', {
           </div>
         </div>
 
-        <div className="flex-shrink-0 py-2.5 text-center border-t border-gray-100 bg-white">
-          <p className="text-[10px] text-gray-400">Powered by Next Appointment</p>
+        {/* Persistent App Footer pinned neatly at the bottom baseline of the form card container */}
+        <div className="w-full py-4 text-center border-t border-gray-100 bg-gray-50/50 flex-shrink-0">
+          <p className="text-[10px] text-gray-400 font-medium tracking-wide">Powered by Next Appointment</p>
         </div>
       </div>
 
