@@ -234,18 +234,22 @@ export default function App() {
       if (consentError) console.error("Consent log failed silently:", consentError);
 
       // 3. Trigger Email Edge Function
-      await supabase.functions.invoke('send-booking-email', {
-        body: { 
-          name: formData.name,
-          mobile: formData.mobile,
-          whatsapp: formData.whatsapp || formData.mobile,
-          email: formData.email,
-          appointment_date: formData.date,
-          time: formData.timeSlot,
-          test: testNames,
-          booking_id: finalBookingId 
-        },
-      });
+      // 3. Trigger Email Edge Function
+await supabase.functions.invoke('send-booking-email', {
+  body: { 
+    patient_name: formData.name,       // ✨ Fixed to match edge function
+    mobile: formData.mobile,
+    whatsapp: formData.whatsapp || formData.mobile,
+    email: formData.email,
+    appointment_date: `${formData.date} at ${formData.timeSlot}`, // Combined for your template
+    time: formData.timeSlot,
+    test_name: testNames,              // ✨ Fixed to match edge function
+    booking_id: finalBookingId,
+    lab_id: labSettings.id,            // ✨ Added: Crucial for your database query!
+    age: parseInt(formData.age),
+    gender: formData.gender
+  },
+});
 
       setSuccess({ 
         bookingId: finalBookingId, 
