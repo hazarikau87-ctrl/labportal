@@ -304,7 +304,8 @@ await supabase.functions.invoke('send-booking-email', {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-white flex justify-center items-center p-0 sm:p-4">
-      <div className="w-full max-w-[480px] bg-white rounded-none sm:rounded-2xl shadow-none sm:shadow-2xl flex flex-col h-screen sm:h-[92vh] overflow-hidden">
+      {/* 🟢 CHANGE h-screen AND sm:h-[92vh] TO h-auto / max-h-[95vh] OR max-h-screen */}
+<div className="w-full max-w-[480px] bg-white rounded-none sm:rounded-2xl shadow-none sm:shadow-2xl flex flex-col h-auto max-h-screen sm:max-h-[92vh] overflow-hiddenmy-auto">
         
         <div id="printable-receipt" className="flex flex-col flex-1 overflow-y-auto bg-white">
           <Header 
