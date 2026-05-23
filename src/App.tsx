@@ -242,7 +242,7 @@ export default function App() {
           email: formData.email,
           appointment_date: `${formData.date} at ${formData.timeSlot}`, // Combined for your template
           time: formData.timeSlot,
-          test: testNames,              // ✨ Fixed to match edge function
+          test_name: testNames,              // ✨ Fixed to match edge function
           booking_id: finalBookingId,
           lab_id: labSettings.id,            // ✨ Added: Crucial for your database query!
           age: parseInt(formData.age),
