@@ -169,6 +169,18 @@ export default function App() {
 
     setSubmitting(true);
     
+    // 1. Capture target lists inside localized memory boundaries right away
+    const targetBookingName = formData.name;
+    const targetMobile = formData.mobile;
+    const targetWhatsapp = formData.whatsapp || formData.mobile;
+    const targetEmail = formData.email;
+    const targetDate = formData.date;
+    const targetTimeSlot = formData.timeSlot;
+    const targetAge = parseInt(formData.age);
+    const targetGender = formData.gender;
+    const targetTermsChecked = formData.termsChecked;
+    const testNames = formData.selectedTests.join(', ');
+
     let activeToken = formData.current_lead_token;
     if (!activeToken) {
       activeToken = await handleNext();
@@ -179,8 +191,7 @@ export default function App() {
       }
     }
 
-    const finalBookingId = generateBookingId(formData.name);
-    const testNames = formData.selectedTests.join(', ');
+    const finalBookingId = generateBookingId(targetBookingName);
 
     try {
       const userIP = await getUserIP();
@@ -204,28 +215,28 @@ export default function App() {
 
       setBtnLabel('Finalizing...');
 
-      // 1. UPDATE targeting the unique tracking token generated during Step 1
+      // Update targeting the unique tracking token generated during Step 1
       const { error: dbError } = await supabase
         .from('appointments')
         .update({
-          appointment_date: formData.date,
-          time: formData.timeSlot,
+          appointment_date: targetDate,
+          time: targetTimeSlot,
           test: testNames,
           booking_id: finalBookingId,
           prescription_url: savedFilePath,
           status: 'Confirmed'
         })
-        .eq('booking_id', activeToken); // Direct, unique identifier hook
+        .eq('booking_id', activeToken);
 
       if (dbError) throw dbError;
 
-      // 2. Log Consent safely matching new state configuration
+      // Log Consent safely matching new state configuration
       const { error: consentError } = await supabase.from('consent_logs').insert([{
         lab_id: labSettings.id,
         booking_id: finalBookingId,
-        patient_name: formData.name,
+        patient_name: targetBookingName,
         consent_text: TERMS_TEXT,
-        consent_given: formData.termsChecked,
+        consent_given: targetTermsChecked,
         ip_address: userIP || '0.0.0.0',
         user_agent: navigator.userAgent,
         consent_version: 'v1.0',
@@ -233,28 +244,28 @@ export default function App() {
 
       if (consentError) console.error("Consent log failed silently:", consentError);
 
-      // 3. Trigger Email Edge Function
+      // Trigger Email Edge Function safely with preserved constants
       await supabase.functions.invoke('send-booking-email', {
         body: { 
-          patient_name: formData.name,       // ✨ Fixed to match edge function
-          mobile: formData.mobile,
-          whatsapp: formData.whatsapp || formData.mobile,
-          email: formData.email,
-          appointment_date: `${formData.date} at ${formData.timeSlot}`, // Combined for your template
-          time: formData.timeSlot,
-          test_name: testNames,              // ✨ Fixed to match edge function
+          patient_name: targetBookingName,
+          mobile: targetMobile,
+          whatsapp: targetWhatsapp,
+          email: targetEmail,
+          appointment_date: `${targetDate} at ${targetTimeSlot}`,
+          time: targetTimeSlot,
+          test_name: testNames, // Fixed: This will never arrive undefined now!
           booking_id: finalBookingId,
-          lab_id: labSettings.id,            // ✨ Added: Crucial for your database query!
-          age: parseInt(formData.age),
-          gender: formData.gender
+          lab_id: labSettings.id,
+          age: targetAge,
+          gender: targetGender
         },
       });
 
       setSuccess({ 
         bookingId: finalBookingId, 
-        name: formData.name, 
+        name: targetBookingName, 
         tests: testNames, 
-        dateTime: `${formData.date} at ${formData.timeSlot}` 
+        dateTime: `${targetDate} at ${targetTimeSlot}` 
       });
       
       window.scrollTo({ top: 0, behavior: 'smooth' });
