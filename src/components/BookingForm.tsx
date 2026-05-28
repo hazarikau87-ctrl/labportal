@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { User, Smartphone, Mail, Upload, Calendar, Clock, Info, ArrowRight, ArrowLeft } from 'lucide-react';
+import { User, Smartphone, Mail, Upload, Calendar, Clock, Info, ArrowRight, ArrowLeft, MapPin } from 'lucide-react';
 import TestSelector from './TestSelector';
 import { getLocalDate } from '../lib/utils';
 
@@ -24,9 +24,9 @@ export default function BookingForm({
   };
 
   const handleNextStep = async () => {
-    // Basic validation before moving to step 2
-    if (!formData.name || !formData.mobile || !formData.age || !formData.gender) {
-      alert("Please fill in all required patient information fields.");
+    // Basic validation before moving to step 2 - Including required address fields if "home" collection or if universally required
+    if (!formData.name || !formData.mobile || !formData.age || !formData.gender || !formData.addressLine || !formData.pincode) {
+      alert("Please fill in all required patient information fields, including Address and Pincode.");
       return;
     }
 
@@ -130,6 +130,59 @@ export default function BookingForm({
             </div>
           </div>
 
+          {/* Integrated Address Fields Section */}
+          <div className="space-y-3 pt-1">
+            <div>
+              <label htmlFor="addressLine" className="block text-xs font-medium text-blue-900 mb-1">
+                Flat/House No., Building, Street *
+              </label>
+              <div className="relative">
+                <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-green-700" />
+                <input
+                  type="text"
+                  id="addressLine"
+                  value={formData.addressLine || ''}
+                  onChange={(e) => updateField('addressLine', e.target.value)}
+                  placeholder="e.g., House No. 12, ABC Heights"
+                  className={`${fieldCls('addressLine')} pl-9`}
+                />
+              </div>
+              {errors.addressLine && <p className="text-red-500 text-[10px] mt-0.5">{errors.addressLine}</p>}
+            </div>
+
+            <div className="flex gap-2.5">
+              <div className="flex-1">
+                <label htmlFor="pincode" className="block text-xs font-medium text-blue-900 mb-1">
+                  Pincode *
+                </label>
+                <input
+                  type="text"
+                  id="pincode"
+                  maxLength={6}
+                  value={formData.pincode || ''}
+                  onChange={(e) => updateField('pincode', e.target.value)}
+                  placeholder="6-digit PIN"
+                  className={fieldCls('pincode')}
+                />
+                {errors.pincode && <p className="text-red-500 text-[10px] mt-0.5">{errors.pincode}</p>}
+              </div>
+
+              <div className="flex-1">
+                <label htmlFor="landmark" className="block text-xs font-medium text-blue-900 mb-1">
+                  Landmark (Optional)
+                </label>
+                <input
+                  type="text"
+                  id="landmark"
+                  value={formData.landmark || ''}
+                  onChange={(e) => updateField('landmark', e.target.value)}
+                  placeholder="e.g., Near Apollo Pharmacy"
+                  className={fieldCls('landmark')}
+                />
+              </div>
+            </div>
+          </div>
+
           <button 
             type="button" 
             onClick={handleNextStep}
@@ -211,55 +264,10 @@ export default function BookingForm({
             </div>
 
             {formData.bookingType === 'home' && (
-              <div className="pt-2.5 border-t border-gray-100 space-y-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
-                <h3 className="text-xs font-bold text-gray-800">Home Address Details</h3>
-                
-                <div>
-                  <label htmlFor="addressLine" className="block text-[10px] font-medium text-gray-500 mb-1">
-                    Flat/House No., Building, Street *
-                  </label>
-                  <input
-                    type="text"
-                    id="addressLine"
-                    value={formData.addressLine || ''}
-                    onChange={(e) => updateField('addressLine', e.target.value)}
-                    placeholder="e.g., House No. 12, ABC Heights"
-                    className="w-full px-3 py-2 border border-gray-200 rounded-md text-xs bg-gray-50 focus:outline-none focus:bg-white focus:border-green-600"
-                  />
-                  {errors.addressLine && <p className="text-red-500 text-[10px] mt-0.5">{errors.addressLine}</p>}
-                </div>
-
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <label htmlFor="pincode" className="block text-[10px] font-medium text-gray-500 mb-1">
-                      Pincode *
-                    </label>
-                    <input
-                      type="text"
-                      id="pincode"
-                      maxLength={6}
-                      value={formData.pincode || ''}
-                      onChange={(e) => updateField('pincode', e.target.value)}
-                      placeholder="6-digit PIN"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-md text-xs bg-gray-50 focus:outline-none focus:bg-white focus:border-green-600"
-                    />
-                    {errors.pincode && <p className="text-red-500 text-[10px] mt-0.5">{errors.pincode}</p>}
-                  </div>
-
-                  <div>
-                    <label htmlFor="landmark" className="block text-[10px] font-medium text-gray-500 mb-1">
-                      Landmark (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      id="landmark"
-                      value={formData.landmark || ''}
-                      onChange={(e) => updateField('landmark', e.target.value)}
-                      placeholder="e.g., Near Apollo Pharmacy"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-md text-xs bg-gray-50 focus:outline-none focus:bg-white focus:border-green-600"
-                    />
-                  </div>
-                </div>
+              <div className="pt-2.5 border-t border-gray-100 space-y-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                <p className="text-[11px] text-green-700 font-semibold flex items-center gap-1">
+                  <MapPin size={12} /> Address confirmed from patient profile details.
+                </p>
               </div>
             )}
           </div>
