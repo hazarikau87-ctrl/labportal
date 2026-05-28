@@ -58,6 +58,11 @@ export default function App() {
     date: getLocalDate(),
     timeSlot: '',
     termsChecked: false,
+    // Added fields to keep state completely in sync with sub-components
+    bookingType: 'walk-in' as 'walk-in' | 'home',
+    addressLine: '',
+    pincode: '',
+    landmark: '',
   });
 
   const [showTerms, setShowTerms] = useState(false);
@@ -146,7 +151,12 @@ export default function App() {
           test: 'LEAD_PENDING',
           booking_id: uniqueToken,
           appointment_date: getLocalDate(),
-          time: 'TBD'
+          time: 'TBD',
+          // Sync early address parameters with Step 1 lead ingestion
+          booking_type: formData.bookingType || 'walk-in',
+          address_line: formData.bookingType === 'home' ? formData.addressLine : null,
+          pincode: formData.bookingType === 'home' ? formData.pincode : null,
+          landmark: formData.bookingType === 'home' ? formData.landmark : null
         }]);
 
       if (error) throw error;
@@ -180,6 +190,12 @@ export default function App() {
     const targetGender = formData.gender;
     const targetTermsChecked = formData.termsChecked;
     const testNames = formData.selectedTests.join(', ');
+    
+    // Memory boundaries for collection method configurations
+    const targetBookingType = formData.bookingType;
+    const targetAddressLine = formData.addressLine;
+    const targetPincode = formData.pincode;
+    const targetLandmark = formData.landmark;
 
     let activeToken = formData.current_lead_token;
     if (!activeToken) {
@@ -224,7 +240,12 @@ export default function App() {
           test: testNames,
           booking_id: finalBookingId,
           prescription_url: savedFilePath,
-          status: 'Confirmed'
+          status: 'Confirmed',
+          // Atomic push mapping frontend snake_case columns with sanitized inputs
+          booking_type: targetBookingType || 'walk-in',
+          address_line: targetBookingType === 'home' ? targetAddressLine : null,
+          pincode: targetBookingType === 'home' ? targetPincode : null,
+          landmark: targetBookingType === 'home' ? targetLandmark : null
         })
         .eq('booking_id', activeToken);
 
@@ -253,11 +274,16 @@ export default function App() {
           email: targetEmail,
           appointment_date: `${targetDate} at ${targetTimeSlot}`,
           time: targetTimeSlot,
-          test_name: testNames, // Fixed: This will never arrive undefined now!
+          test_name: testNames,
           booking_id: finalBookingId,
           lab_id: labSettings.id,
           age: targetAge,
-          gender: targetGender
+          gender: targetGender,
+          // Forward address configurations safely to edge payload
+          booking_type: targetBookingType,
+          address_line: targetBookingType === 'home' ? targetAddressLine : null,
+          pincode: targetBookingType === 'home' ? targetPincode : null,
+          landmark: targetBookingType === 'home' ? targetLandmark : null
         },
       });
 
@@ -284,7 +310,8 @@ export default function App() {
       name: '', mobile: '', whatsapp: '', email: '',
       age: '', gender: '', selectedTests: [],
       prescriptionFile: null, date: getLocalDate(),
-      timeSlot: '', termsChecked: false
+      timeSlot: '', termsChecked: false,
+      bookingType: 'walk-in', addressLine: '', pincode: '', landmark: ''
     });
     setErrors({});
     setSuccess(null);
