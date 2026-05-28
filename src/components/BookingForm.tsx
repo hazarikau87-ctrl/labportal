@@ -39,9 +39,15 @@ export default function BookingForm({
   };
 
   const handleNextStep = async () => {
-    // FIX: Only validate universal patient details here. Address is validated conditionally.
+    // Validate core patient details
     if (!formData.name || !formData.mobile || !formData.age || !formData.gender) {
       alert("Please fill in all required patient info fields (Name, Mobile, Age, Gender).");
+      return;
+    }
+
+    // Explicitly validate address fields in Step 1 if Home Collection is picked
+    if (formData.bookingType === 'home' && (!formData.addressLine || !formData.pincode)) {
+      alert("Please fill in your address and pincode for Home Collection.");
       return;
     }
 
@@ -150,42 +156,7 @@ export default function BookingForm({
             </div>
           </div>
 
-          <button 
-            type="button" 
-            onClick={handleNextStep}
-            disabled={isSavingLead}
-            className="w-full py-3 mt-4 bg-green-700 text-white font-semibold rounded-lg flex items-center justify-center gap-2 disabled:bg-gray-400"
-          >
-            {isSavingLead ? 'Saving...' : 'Next Step'} <ArrowRight size={16} />
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-3 animate-in fade-in slide-in-from-right-4 duration-300">
-          <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="block text-xs font-medium text-blue-900">Select Test(s) *</label>
-              <button type="button" onClick={() => setShowRates(true)} className="text-[10px] font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded flex items-center gap-1">
-                <Info size={10} /> Rates
-              </button>
-            </div>
-            <TestSelector 
-              selected={formData.selectedTests || []} 
-              onChange={(val) => updateField('selectedTests', val)} 
-              options={[...(labSettings?.available_tests.map((t: any) => typeof t === 'object' ? t.name : t) || []), "Prescribed (Upload Below)"]} 
-            />
-            {errors.tests && <p className="text-red-500 text-[10px] mt-0.5">{errors.tests}</p>}
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-blue-900 mb-1">Prescription (Optional)</label>
-            <label className="border-2 border-dashed border-green-200 rounded-lg p-3 flex flex-col items-center bg-green-50 cursor-pointer">
-              <Upload size={18} className="text-green-700 mb-1" />
-              <p className="text-[10px] text-gray-500">{formData.prescriptionFile ? formData.prescriptionFile.name : 'Tap to upload'}</p>
-              <input type="file" className="hidden" onChange={(e) => updateField('prescriptionFile', e.target.files?.[0] || null)} />
-            </label>
-          </div>
-
-          {/* Method Selector */}
+          {/* Method Selector & Address moved to Step 1 */}
           <div className="w-full space-y-3 p-3.5 border border-gray-200 rounded-lg bg-white shadow-sm">
             <div>
               <label className="block text-xs font-semibold text-blue-900 mb-2">
@@ -230,7 +201,7 @@ export default function BookingForm({
               </div>
             </div>
 
-            {/* Render fixed subcomponent conditionally inside step 2 */}
+            {/* Render fixed address section inline if Home Collection is chosen */}
             {formData.bookingType === 'home' && (
               <AddressSection 
                 formData={formData} 
@@ -239,6 +210,41 @@ export default function BookingForm({
                 fieldCls={fieldCls}
               />
             )}
+          </div>
+
+          <button 
+            type="button" 
+            onClick={handleNextStep}
+            disabled={isSavingLead}
+            className="w-full py-3 mt-4 bg-green-700 text-white font-semibold rounded-lg flex items-center justify-center gap-2 disabled:bg-gray-400"
+          >
+            {isSavingLead ? 'Saving...' : 'Next Step'} <ArrowRight size={16} />
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3 animate-in fade-in slide-in-from-right-4 duration-300">
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-xs font-medium text-blue-900">Select Test(s) *</label>
+              <button type="button" onClick={() => setShowRates(true)} className="text-[10px] font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded flex items-center gap-1">
+                <Info size={10} /> Rates
+              </button>
+            </div>
+            <TestSelector 
+              selected={formData.selectedTests || []} 
+              onChange={(val) => updateField('selectedTests', val)} 
+              options={[...(labSettings?.available_tests.map((t: any) => typeof t === 'object' ? t.name : t) || []), "Prescribed (Upload Below)"]} 
+            />
+            {errors.tests && <p className="text-red-500 text-[10px] mt-0.5">{errors.tests}</p>}
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-blue-900 mb-1">Prescription (Optional)</label>
+            <label className="border-2 border-dashed border-green-200 rounded-lg p-3 flex flex-col items-center bg-green-50 cursor-pointer">
+              <Upload size={18} className="text-green-700 mb-1" />
+              <p className="text-[10px] text-gray-500">{formData.prescriptionFile ? formData.prescriptionFile.name : 'Tap to upload'}</p>
+              <input type="file" className="hidden" onChange={(e) => updateField('prescriptionFile', e.target.files?.[0] || null)} />
+            </label>
           </div>
 
           <div className="flex gap-2.5">
