@@ -45,6 +45,17 @@ export default function BookingForm({
   // Fixed the key reference for timeSlot to match state
   const fieldCls = (key: string) => `w-full px-3 py-2.5 rounded-lg border text-sm bg-gray-50 focus:outline-none focus:bg-white transition-colors ${errors[key] ? 'border-red-400 focus:border-red-500' : 'border-gray-200 focus:border-green-600'}`;
 
+  // Local handler to cleanly clean data fields depending on selection
+  const handleBookingTypeChange = (type: 'walk-in' | 'home') => {
+    setFormData({
+      ...formData,
+      bookingType: type,
+      addressLine: type === 'home' ? formData.addressLine : '',
+      pincode: type === 'home' ? formData.pincode : '',
+      landmark: type === 'home' ? formData.landmark : ''
+    });
+  };
+
   return (
     <form 
       onSubmit={(e) => {
@@ -152,6 +163,105 @@ export default function BookingForm({
               <p className="text-[10px] text-gray-500">{formData.prescriptionFile ? formData.prescriptionFile.name : 'Tap to upload'}</p>
               <input type="file" className="hidden" onChange={(e) => updateField('prescriptionFile', e.target.files?.[0] || null)} />
             </label>
+          </div>
+
+          {/* Integrated AddressSection Structure */}
+          <div className="w-full space-y-3 p-3.5 border border-gray-200 rounded-lg bg-white shadow-sm">
+            <div>
+              <label className="block text-xs font-semibold text-blue-900 mb-2">
+                Sample Collection Method *
+              </label>
+              <div className="grid grid-cols-2 gap-2.5">
+                <label 
+                  className={`flex items-center justify-center py-2 px-3 border rounded-lg cursor-pointer text-xs font-medium transition-all ${
+                    (formData.bookingType || 'walk-in') === 'walk-in' 
+                      ? 'border-green-700 bg-green-50 text-green-800 ring-2 ring-green-100 font-semibold' 
+                      : 'border-gray-200 hover:bg-gray-50 text-gray-600'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="bookingType"
+                    value="walk-in"
+                    checked={(formData.bookingType || 'walk-in') === 'walk-in'}
+                    onChange={() => handleBookingTypeChange('walk-in')}
+                    className="sr-only"
+                  />
+                  Visit the Lab
+                </label>
+
+                <label 
+                  className={`flex items-center justify-center py-2 px-3 border rounded-lg cursor-pointer text-xs font-medium transition-all ${
+                    formData.bookingType === 'home' 
+                      ? 'border-green-700 bg-green-50 text-green-800 ring-2 ring-green-100 font-semibold' 
+                      : 'border-gray-200 hover:bg-gray-50 text-gray-600'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="bookingType"
+                    value="home"
+                    checked={formData.bookingType === 'home'}
+                    onChange={() => handleBookingTypeChange('home')}
+                    className="sr-only"
+                  />
+                  Home Collection
+                </label>
+              </div>
+            </div>
+
+            {formData.bookingType === 'home' && (
+              <div className="pt-2.5 border-t border-gray-100 space-y-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                <h3 className="text-xs font-bold text-gray-800">Home Address Details</h3>
+                
+                <div>
+                  <label htmlFor="addressLine" className="block text-[10px] font-medium text-gray-500 mb-1">
+                    Flat/House No., Building, Street *
+                  </label>
+                  <input
+                    type="text"
+                    id="addressLine"
+                    value={formData.addressLine || ''}
+                    onChange={(e) => updateField('addressLine', e.target.value)}
+                    placeholder="e.g., House No. 12, ABC Heights"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-md text-xs bg-gray-50 focus:outline-none focus:bg-white focus:border-green-600"
+                  />
+                  {errors.addressLine && <p className="text-red-500 text-[10px] mt-0.5">{errors.addressLine}</p>}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label htmlFor="pincode" className="block text-[10px] font-medium text-gray-500 mb-1">
+                      Pincode *
+                    </label>
+                    <input
+                      type="text"
+                      id="pincode"
+                      maxLength={6}
+                      value={formData.pincode || ''}
+                      onChange={(e) => updateField('pincode', e.target.value)}
+                      placeholder="6-digit PIN"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-md text-xs bg-gray-50 focus:outline-none focus:bg-white focus:border-green-600"
+                    />
+                    {errors.pincode && <p className="text-red-500 text-[10px] mt-0.5">{errors.pincode}</p>}
+                  </div>
+
+                  <div>
+                    <label htmlFor="landmark" className="block text-[10px] font-medium text-gray-500 mb-1">
+                      Landmark (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      id="landmark"
+                      value={formData.landmark || ''}
+                      onChange={(e) => updateField('landmark', e.target.value)}
+                      placeholder="e.g., Near Apollo Pharmacy"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-md text-xs bg-gray-50 focus:outline-none focus:bg-white focus:border-green-600"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-2.5">
