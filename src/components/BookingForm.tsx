@@ -20,7 +20,7 @@ interface BookingFormProps {
 
 export default function BookingForm({
   formData,
-  setFormData,
+  setFormData, // This is the prop from App.tsx
   errors,
   onSubmit,
   onNext,
@@ -34,8 +34,20 @@ export default function BookingForm({
   const [step, setStep] = useState(1);
   const [isSavingLead, setIsSavingLead] = useState(false);
 
+  // FIXED: Use functional state updates on the passed prop
   const updateField = (field: string, value: any) => {
-    setFormData({ ...formData, [field]: value });
+    setFormData((prev: any) => ({ ...prev, [field]: value }));
+  };
+
+  // FIXED: Use functional state updates here too so we don't drop context
+  const handleBookingTypeChange = (type: 'walk-in' | 'home') => {
+    setFormData((prev: any) => ({
+      ...prev,
+      bookingType: type,
+      addressLine: type === 'home' ? prev.addressLine : '',
+      pincode: type === 'home' ? prev.pincode : '',
+      landmark: type === 'home' ? prev.landmark : ''
+    }));
   };
 
   const handleNextStep = async () => {
