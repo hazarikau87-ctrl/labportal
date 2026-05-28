@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { User, Smartphone, Mail, Upload, Calendar, Clock, Info, ArrowRight, ArrowLeft, MapPin } from 'lucide-react';
 import TestSelector from './TestSelector';
+import AddressSection from './AddressSection'; // Imported custom AddressSection component
 import { getLocalDate } from '../lib/utils';
 
 export default function BookingForm({
@@ -24,7 +25,7 @@ export default function BookingForm({
   };
 
   const handleNextStep = async () => {
-    // Basic validation before moving to step 2 - Including required address fields if "home" collection or if universally required
+    // Basic validation before moving to step 2 - Including required address fields if universally required
     if (!formData.name || !formData.mobile || !formData.age || !formData.gender || !formData.addressLine || !formData.pincode) {
       alert("Please fill in all required patient information fields, including Address and Pincode.");
       return;
@@ -130,58 +131,13 @@ export default function BookingForm({
             </div>
           </div>
 
-          {/* Integrated Address Fields Section */}
-          <div className="space-y-3 pt-1">
-            <div>
-              <label htmlFor="addressLine" className="block text-xs font-medium text-blue-900 mb-1">
-                Flat/House No., Building, Street *
-              </label>
-              <div className="relative">
-                <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-green-700" />
-                <input
-                  type="text"
-                  id="addressLine"
-                  value={formData.addressLine || ''}
-                  onChange={(e) => updateField('addressLine', e.target.value)}
-                  placeholder="e.g., House No. 12, ABC Heights"
-                  className={`${fieldCls('addressLine')} pl-9`}
-                />
-              </div>
-              {errors.addressLine && <p className="text-red-500 text-[10px] mt-0.5">{errors.addressLine}</p>}
-            </div>
-
-            <div className="flex gap-2.5">
-              <div className="flex-1">
-                <label htmlFor="pincode" className="block text-xs font-medium text-blue-900 mb-1">
-                  Pincode *
-                </label>
-                <input
-                  type="text"
-                  id="pincode"
-                  maxLength={6}
-                  value={formData.pincode || ''}
-                  onChange={(e) => updateField('pincode', e.target.value)}
-                  placeholder="6-digit PIN"
-                  className={fieldCls('pincode')}
-                />
-                {errors.pincode && <p className="text-red-500 text-[10px] mt-0.5">{errors.pincode}</p>}
-              </div>
-
-              <div className="flex-1">
-                <label htmlFor="landmark" className="block text-xs font-medium text-blue-900 mb-1">
-                  Landmark (Optional)
-                </label>
-                <input
-                  type="text"
-                  id="landmark"
-                  value={formData.landmark || ''}
-                  onChange={(e) => updateField('landmark', e.target.value)}
-                  placeholder="e.g., Near Apollo Pharmacy"
-                  className={fieldCls('landmark')}
-                />
-              </div>
-            </div>
-          </div>
+          {/* Cleanly Integrated AddressSection Component */}
+          <AddressSection 
+            formData={formData} 
+            errors={errors} 
+            updateField={updateField} 
+            fieldCls={fieldCls} 
+          />
 
           <button 
             type="button" 
