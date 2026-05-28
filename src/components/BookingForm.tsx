@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { User, Smartphone, Mail, Upload, Calendar, Clock, Info, ArrowRight, ArrowLeft, MapPin } from 'lucide-react';
 import TestSelector from './TestSelector';
-import AddressSection from './AddressSection'; // Importing our fixed component
+import AddressSection from './AddressSection'; 
 import { getLocalDate } from '../lib/utils';
 
 interface BookingFormProps {
@@ -20,7 +20,7 @@ interface BookingFormProps {
 
 export default function BookingForm({
   formData,
-  setFormData, // This is the prop from App.tsx
+  setFormData, 
   errors,
   onSubmit,
   onNext,
@@ -34,12 +34,12 @@ export default function BookingForm({
   const [step, setStep] = useState(1);
   const [isSavingLead, setIsSavingLead] = useState(false);
 
-  // FIXED: Use functional state updates on the passed prop
+  // FIXED: Updates global state context functionally
   const updateField = (field: string, value: any) => {
     setFormData((prev: any) => ({ ...prev, [field]: value }));
   };
 
-  // FIXED: Use functional state updates here too so we don't drop context
+  // FIXED: Mutates type & explicitly structure addresses in global state cleanly
   const handleBookingTypeChange = (type: 'walk-in' | 'home') => {
     setFormData((prev: any) => ({
       ...prev,
@@ -51,13 +51,11 @@ export default function BookingForm({
   };
 
   const handleNextStep = async () => {
-    // Validate core patient details
     if (!formData.name || !formData.mobile || !formData.age || !formData.gender) {
       alert("Please fill in all required patient info fields (Name, Mobile, Age, Gender).");
       return;
     }
 
-    // Explicitly validate address fields in Step 1 if Home Collection is picked
     if (formData.bookingType === 'home' && (!formData.addressLine || !formData.pincode)) {
       alert("Please fill in your address and pincode for Home Collection.");
       return;
@@ -69,7 +67,7 @@ export default function BookingForm({
       setStep(2);
     } catch (err) {
       console.error("Step 1 Lead capture failed", err);
-      setStep(2); // Move forward anyway so user isn't stuck
+      setStep(2); 
     } finally {
       setIsSavingLead(false);
     }
@@ -77,21 +75,9 @@ export default function BookingForm({
 
   const fieldCls = (key: string) => `w-full px-3 py-2.5 rounded-lg border text-sm bg-gray-50 focus:outline-none focus:bg-white transition-colors ${errors[key] ? 'border-red-400 focus:border-red-500' : 'border-gray-200 focus:border-green-600'}`;
 
-  const handleBookingTypeChange = (type: 'walk-in' | 'home') => {
-    setFormData({
-      ...formData,
-      bookingType: type,
-      // Clear address info cleanly if switching back to walk-in
-      addressLine: type === 'home' ? formData.addressLine : '',
-      pincode: type === 'home' ? formData.pincode : '',
-      landmark: type === 'home' ? formData.landmark : ''
-    });
-  };
-
   return (
     <form 
       onSubmit={(e) => {
-        // Double check address validation on final submit if Home Collection is picked
         if (formData.bookingType === 'home' && (!formData.addressLine || !formData.pincode)) {
           e.preventDefault();
           alert("Please fill in your address and pincode for Home Collection.");
@@ -168,7 +154,7 @@ export default function BookingForm({
             </div>
           </div>
 
-          {/* Method Selector & Address moved to Step 1 */}
+          {/* Method Selector & Address Configuration */}
           <div className="w-full space-y-3 p-3.5 border border-gray-200 rounded-lg bg-white shadow-sm">
             <div>
               <label className="block text-xs font-semibold text-blue-900 mb-2">
@@ -213,7 +199,6 @@ export default function BookingForm({
               </div>
             </div>
 
-            {/* Render fixed address section inline if Home Collection is chosen */}
             {formData.bookingType === 'home' && (
               <AddressSection 
                 formData={formData} 
