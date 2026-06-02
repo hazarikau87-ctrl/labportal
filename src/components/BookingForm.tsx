@@ -1,284 +1,575 @@
-import { useState } from 'react';
-import { User, Smartphone, Mail, Upload, Calendar, Clock, Info, ArrowRight, ArrowLeft, MapPin } from 'lucide-react';
-import TestSelector from './TestSelector';
-import AddressSection from './AddressSection'; 
-import { getLocalDate } from '../lib/utils';
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  User, Phone, Mail, Calendar, Clock, Beaker, MapPin, 
+  AlertCircle, CheckCircle, Upload, X, 
+  Loader2, ChevronRight, Home, Globe, Activity, Stethoscope
+} from 'lucide-react';
+import { supabase } from '../lib/supabaseClient'; 
 
-interface BookingFormProps {
-  formData: any;
-  setFormData: (data: any) => void;
-  errors: Record<string, string>;
-  onSubmit: (e: React.FormEvent) => void;
-  onNext: () => Promise<void>;
-  submitting: boolean;
-  btnLabel: string;
-  labSettings: any;
-  slots: Array<{ value: string; disabled: boolean }>;
-  setShowRates: (show: boolean) => void;
-  setShowTerms: (show: boolean) => void;
+// ============== INTERFACES (STRICT MATCH) ==============
+export interface AppointmentData {
+  id?: string;
+  name: string;
+  mobile: string;
+  whatsapp: string;
+  email: string;
+  age: string;
+  gender: 'Male' | 'Female' | 'Other' | '';
+  appointment_date: string;
+  time: string;
+  test: string;
+  booking_id?: string;
+  status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled';
+  is_deleted: boolean;
+  deleted_at: string | null;
+  remarks: string;
+  created_at?: string;
+  lab_id: string;
+  prescription_url: string;
+  booking_type: 'Walk-in' | 'Home Collection' | 'Online';
+  address_line: string;
+  pincode: string;
+  landmark: string;
 }
 
-export default function BookingForm({
-  formData,
-  setFormData, 
-  errors,
-  onSubmit,
-  onNext,
-  submitting,
-  btnLabel,
-  labSettings,
-  slots,
-  setShowRates,
-  setShowTerms
-}: BookingFormProps) {
-  const [step, setStep] = useState(1);
-  const [isSavingLead, setIsSavingLead] = useState(false);
+interface LabData {
+  id: string;
+  lab_name: string;
+  theme_color?: string;
+  available_tests?: string[]; // Expected format: Array of test names/codes
+}
 
-  // FIXED: Updates global state context functionally
-  const updateField = (field: string, value: any) => {
-    setFormData((prev: any) => ({ ...prev, [field]: value }));
-  };
+interface ValidationErrors {
+  [key: string]: string;
+}
 
-  // FIXED: Mutates type & explicitly structure addresses in global state cleanly
-  const handleBookingTypeChange = (type: 'walk-in' | 'home') => {
-    setFormData((prev: any) => ({
-      ...prev,
-      bookingType: type,
-      addressLine: type === 'home' ? prev.addressLine : '',
-      pincode: type === 'home' ? prev.pincode : '',
-      landmark: type === 'home' ? prev.landmark : ''
+interface BookingRegistrationFormProps {
+  onSuccess?: (data: AppointmentData) => void;
+  onCancel?: () => void;
+  currentLabId?: string;
+  isOpen?: boolean;
+}
+
+// Fallback test list if the Lab record doesn't have available_tests populated yet
+const DEFAULT_TESTS = [
+  "Complete Blood Count (CBC)",
+  "Fasting Blood Sugar (FBS)",
+  "HbA1c",
+  "Liver Function Test (LFT)",
+  "Kidney Function Test (KFT)",
+  "Lipid Profile",
+  "Thyroid Profile (T3, T4, TSH)",
+  "Vitamin D3",
+  "Vitamin B12"
+];
+
+export const BookingRegistrationForm: React.FC<BookingRegistrationFormProps> = ({ 
+  onSuccess, 
+  onCancel,
+  currentLabId = "LAB-001",
+  isOpen = true
+}) => {
+  // Lab Info State
+  const [labInfo, setLabInfo] = useState<LabData | null>(null);
+  
+  // Strict Form Data State
+  const [formData, setFormData] = useState<AppointmentData>({
+    name: '',
+    mobile: '',
+    whatsapp: '',
+    email: '',
+    age: '',
+    gender: '',
+    appointment_date: '',
+    time: '',
+    test: '',
+    status: 'Pending',
+    is_deleted: false,
+    deleted_at: null,
+    remarks: '',
+    lab_id: currentLabId,
+    prescription_url: '',
+    booking_type: 'Walk-in',
+    address_line: '',
+    pincode: '',
+    landmark: ''
+  });
+
+  const [selectedTests, setSelectedTests] = useState<string[]>([]);
+  const [errors, setErrors] = useState<ValidationErrors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [activeStep, setActiveStep] = useState(1);
+  const [prescriptionFile, setPrescriptionFile] = useState<File | null>(null);
+  const [prescriptionPreview, setPrescriptionPreview] = useState<string | null>(null);
+
+  // Fetch Lab logic from 'Labs' table on mount/id change
+  useEffect(() => {
+    const fetchLabLogics = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('Labs')
+          .select('id, lab_name, theme_color, available_tests')
+          .eq('id', currentLabId)
+          .single();
+
+        if (error) throw error;
+        if (data) {
+          setLabInfo(data);
+        }
+      } catch (err) {
+        console.error("Error fetching from Labs table:", err);
+        // Fallback setting if database table is empty or unreachable
+        setLabInfo({ id: currentLabId, lab_name: "Diagnostic Lab Workspace" });
+      }
+    };
+
+    if (isOpen) {
+      fetchLabLogics();
+    }
+  }, [currentLabId, isOpen]);
+
+  // Sync selected arrays back to the flat string "test" payload column
+  useEffect(() => {
+    setFormData(prev => ({ 
+      ...prev, 
+      test: selectedTests.join(', ') 
     }));
+  }, [selectedTests]);
+
+  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setErrors(prev => ({ ...prev, prescription: 'File size must be under 5MB' }));
+        return;
+      }
+      setPrescriptionPreview(URL.createObjectURL(file));
+      setPrescriptionFile(file);
+      setErrors(prev => ({ ...prev, prescription: '' }));
+    }
+  }, []);
+
+  const validateForm = (): boolean => {
+    const newErrors: ValidationErrors = {};
+    
+    if (!formData.name.trim()) newErrors.name = 'Patient name is required';
+    if (!formData.mobile.match(/^[0-9]{10}$/)) newErrors.mobile = 'Valid 10-digit mobile number required';
+    if (!formData.age || parseInt(formData.age) < 0 || parseInt(formData.age) > 120) newErrors.age = 'Valid age required';
+    if (!formData.gender) newErrors.gender = 'Gender is required';
+    if (!formData.appointment_date) newErrors.appointment_date = 'Date required';
+    if (!formData.time) newErrors.time = 'Time required';
+    if (selectedTests.length === 0) newErrors.tests = 'Select at least one test';
+    
+    if (formData.booking_type === 'Home Collection' && !formData.address_line.trim()) {
+      newErrors.address = 'Address layout is required for Home Collection';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
-  const handleNextStep = async () => {
-    if (!formData.name || !formData.mobile || !formData.age || !formData.gender) {
-      alert("Please fill in all required patient info fields (Name, Mobile, Age, Gender).");
-      return;
-    }
+  const toggleTest = (testName: string) => {
+    setSelectedTests(prev => 
+      prev.includes(testName) ? prev.filter(t => t !== testName) : [...prev, testName]
+    );
+  };
 
-    if (formData.bookingType === 'home' && (!formData.addressLine || !formData.pincode)) {
-      alert("Please fill in your address and pincode for Home Collection.");
-      return;
-    }
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+    
+    setIsSubmitting(true);
+    let finalPrescriptionUrl = '';
 
-    setIsSavingLead(true);
     try {
-      await onNext(); 
-      setStep(2);
-    } catch (err) {
-      console.error("Step 1 Lead capture failed", err);
-      setStep(2); 
+      // 1. Storage bucket processing
+      if (prescriptionFile) {
+        const fileExt = prescriptionFile.name.split('.').pop();
+        const fileName = `${Date.now()}.${fileExt}`;
+        const filePath = `${formData.lab_id}/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('prescriptions')
+          .upload(filePath, prescriptionFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage
+          .from('prescriptions')
+          .getPublicUrl(filePath);
+          
+        finalPrescriptionUrl = urlData.publicUrl;
+      }
+
+      // 2. Exact schema payload construction
+      const targetPayload = {
+        name: formData.name,
+        mobile: formData.mobile,
+        whatsapp: formData.whatsapp || formData.mobile,
+        email: formData.email,
+        age: parseInt(formData.age),
+        gender: formData.gender,
+        appointment_date: formData.appointment_date,
+        time: formData.time,
+        test: formData.test,
+        booking_id: `BK-${Date.now().toString().slice(-6)}`,
+        status: formData.status,
+        is_deleted: false,
+        deleted_at: null,
+        remarks: formData.remarks,
+        lab_id: formData.lab_id,
+        prescription_url: finalPrescriptionUrl,
+        booking_type: formData.booking_type,
+        address_line: formData.booking_type === 'Home Collection' ? formData.address_line : '',
+        pincode: formData.booking_type === 'Home Collection' ? formData.pincode : '',
+        landmark: formData.booking_type === 'Home Collection' ? formData.landmark : ''
+      };
+
+      // 3. Insert into database table
+      const { data, error: dbError } = await supabase
+        .from('appointments')
+        .insert([targetPayload])
+        .select()
+        .single();
+
+      if (dbError) throw dbError;
+
+      setSubmitSuccess(true);
+      if (onSuccess) onSuccess(data);
+
+    } catch (err: any) {
+      console.error("Database Save Error:", err);
+      setErrors(prev => ({ ...prev, global: err.message || "Failed to submit data." }));
     } finally {
-      setIsSavingLead(false);
+      setIsSubmitting(false);
     }
   };
 
-  const fieldCls = (key: string) => `w-full px-3 py-2.5 rounded-lg border text-sm bg-gray-50 focus:outline-none focus:bg-white transition-colors ${errors[key] ? 'border-red-400 focus:border-red-500' : 'border-gray-200 focus:border-green-600'}`;
+  const steps = [
+    { number: 1, title: "Patient Info", icon: User },
+    { number: 2, title: "Tests & Schedule", icon: Beaker },
+    { number: 3, title: "Logistics Details", icon: MapPin }
+  ];
+
+  if (!isOpen) return null;
+
+  // Use dynamic color string if it arrives from backend database row data
+  const themeColor = labInfo?.theme_color || '#4f46e5';
 
   return (
-    <form 
-      onSubmit={(e) => {
-        if (formData.bookingType === 'home' && (!formData.addressLine || !formData.pincode)) {
-          e.preventDefault();
-          alert("Please fill in your address and pincode for Home Collection.");
-          return;
-        }
-        console.log("Submit clicked. Errors:", errors);
-        onSubmit(e);
-      }} 
-      noValidate
-    >
-      {/* Progress Indicator */}
-      <div className="flex items-center justify-between mb-6 px-2">
-        <div className={`flex items-center gap-2 ${step === 1 ? 'text-green-700' : 'text-gray-400'}`}>
-          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${step === 1 ? 'bg-green-700 text-white' : 'bg-gray-200'}`}>1</div>
-          <span className="text-xs font-semibold">Patient Info</span>
-        </div>
-        <div className="flex-1 h-px bg-gray-100 mx-4" />
-        <div className={`flex items-center gap-2 ${step === 2 ? 'text-green-700' : 'text-gray-400'}`}>
-          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${step === 2 ? 'bg-green-700 text-white' : 'bg-gray-200'}`}>2</div>
-          <span className="text-xs font-semibold">Booking</span>
-        </div>
-      </div>
-
-      {step === 1 ? (
-        <div className="space-y-3 animate-in fade-in slide-in-from-right-4 duration-300">
-          <div>
-            <label className="block text-xs font-medium text-blue-900 mb-1">Full Name *</label>
-            <div className="relative">
-              <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-green-700" />
-              <input type="text" value={formData.name || ''} onChange={(e) => updateField('name', e.target.value)} placeholder="Patient's full name" className={`${fieldCls('name')} pl-9`} />
-            </div>
-            {errors.name && <p className="text-red-500 text-[10px] mt-0.5">{errors.name}</p>}
-          </div>
-
-          <div className="flex gap-2.5">
-            <div className="flex-1">
-              <label className="block text-xs font-medium text-blue-900 mb-1">Mobile *</label>
-              <div className="relative">
-                <Smartphone size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-green-700" />
-                <input type="tel" value={formData.mobile || ''} onChange={(e) => updateField('mobile', e.target.value)} placeholder="10-digit" className={`${fieldCls('mobile')} pl-9`} />
-              </div>
-              {errors.mobile && <p className="text-red-500 text-[10px] mt-0.5">{errors.mobile}</p>}
-            </div>
-            <div className="flex-1">
-              <label className="block text-xs font-medium text-blue-900 mb-1">WhatsApp *</label>
-              <input type="tel" value={formData.whatsapp || ''} onChange={(e) => updateField('whatsapp', e.target.value)} placeholder="Number" className={fieldCls('whatsapp')} />
-            </div>
-          </div>
-          <button type="button" onClick={() => updateField('whatsapp', formData.mobile)} className="text-[10px] text-green-700 font-semibold hover:underline block ml-auto">Same as mobile?</button>
-
-          <div>
-            <label className="block text-xs font-medium text-blue-900 mb-1">Email (Optional)</label>
-            <div className="relative">
-              <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-green-700" />
-              <input type="email" value={formData.email || ''} onChange={(e) => updateField('email', e.target.value)} placeholder="example@gmail.com" className={`${fieldCls('email')} pl-9`} />
-            </div>
-          </div>
-
-          <div className="flex gap-2.5">
-            <div className="flex-1">
-              <label className="block text-xs font-medium text-blue-900 mb-1">Age *</label>
-              <input type="number" value={formData.age || ''} onChange={(e) => updateField('age', e.target.value)} placeholder="Years" className={fieldCls('age')} />
-              {errors.age && <p className="text-red-500 text-[10px] mt-0.5">{errors.age}</p>}
-            </div>
-            <div className="flex-1">
-              <label className="block text-xs font-medium text-blue-900 mb-1">Gender *</label>
-              <select value={formData.gender || ''} onChange={(e) => updateField('gender', e.target.value)} className={fieldCls('gender')}>
-                <option value="">Select</option>
-                <option>Male</option>
-                <option>Female</option>
-                <option>Other</option>
-              </select>
-              {errors.gender && <p className="text-red-500 text-[10px] mt-0.5">{errors.gender}</p>}
-            </div>
-          </div>
-
-          {/* Method Selector & Address Configuration */}
-          <div className="w-full space-y-3 p-3.5 border border-gray-200 rounded-lg bg-white shadow-sm">
-            <div>
-              <label className="block text-xs font-semibold text-blue-900 mb-2">
-                Sample Collection Method *
-              </label>
-              <div className="grid grid-cols-2 gap-2.5">
-                <label 
-                  className={`flex items-center justify-center py-2 px-3 border rounded-lg cursor-pointer text-xs font-medium transition-all ${
-                    (formData.bookingType || 'walk-in') === 'walk-in' 
-                      ? 'border-green-700 bg-green-50 text-green-800 ring-2 ring-green-100 font-semibold' 
-                      : 'border-gray-200 hover:bg-gray-50 text-gray-600'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="bookingType"
-                    value="walk-in"
-                    checked={(formData.bookingType || 'walk-in') === 'walk-in'}
-                    onChange={() => handleBookingTypeChange('walk-in')}
-                    className="sr-only"
-                  />
-                  Visit the Lab
-                </label>
-
-                <label 
-                  className={`flex items-center justify-center py-2 px-3 border rounded-lg cursor-pointer text-xs font-medium transition-all ${
-                    formData.bookingType === 'home' 
-                      ? 'border-green-700 bg-green-50 text-green-800 ring-2 ring-green-100 font-semibold' 
-                      : 'border-gray-200 hover:bg-gray-50 text-gray-600'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="bookingType"
-                    value="home"
-                    checked={formData.bookingType === 'home'}
-                    onChange={() => handleBookingTypeChange('home')}
-                    className="sr-only"
-                  />
-                  Home Collection
-                </label>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="relative max-w-4xl w-full mx-auto bg-white rounded-2xl shadow-2xl overflow-hidden">
+        
+        {/* Dynamic Branded Header */}
+        <div style={{ backgroundColor: themeColor }} className="relative px-8 py-6 text-white">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <Stethoscope className="w-6 h-6 text-white/90" />
+              <div>
+                <h2 className="text-xl font-bold tracking-tight">{labInfo?.lab_name || "Loading Clinic Data..."}</h2>
+                <p className="text-xs text-white/70 mt-0.5">Workspace Lab ID: {currentLabId}</p>
               </div>
             </div>
-
-            {formData.bookingType === 'home' && (
-              <AddressSection 
-                formData={formData} 
-                updateField={updateField} 
-                errors={errors} 
-                fieldCls={fieldCls}
-              />
+            {onCancel && (
+              <button onClick={onCancel} className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-white">
+                <X className="w-4 h-4" />
+              </button>
             )}
           </div>
-
-          <button 
-            type="button" 
-            onClick={handleNextStep}
-            disabled={isSavingLead}
-            className="w-full py-3 mt-4 bg-green-700 text-white font-semibold rounded-lg flex items-center justify-center gap-2 disabled:bg-gray-400"
-          >
-            {isSavingLead ? 'Saving...' : 'Next Step'} <ArrowRight size={16} />
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-3 animate-in fade-in slide-in-from-right-4 duration-300">
-          <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="block text-xs font-medium text-blue-900">Select Test(s) *</label>
-              <button type="button" onClick={() => setShowRates(true)} className="text-[10px] font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded flex items-center gap-1">
-                <Info size={10} /> Rates
+          
+          {/* Steps Progress Tracker */}
+          <div className="flex gap-2 mt-6">
+            {steps.map(step => (
+              <button
+                key={step.number}
+                type="button"
+                onClick={() => setActiveStep(step.number)}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  activeStep === step.number ? 'bg-white text-gray-900 shadow-md' : 'bg-white/10 text-white'
+                }`}
+              >
+                <step.icon className="w-3.5 h-3.5" />
+                <span>{step.title}</span>
               </button>
-            </div>
-            <TestSelector 
-              selected={formData.selectedTests || []} 
-              onChange={(val) => updateField('selectedTests', val)} 
-              options={[...(labSettings?.available_tests.map((t: any) => typeof t === 'object' ? t.name : t) || []), "Prescribed (Upload Below)"]} 
-            />
-            {errors.tests && <p className="text-red-500 text-[10px] mt-0.5">{errors.tests}</p>}
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-blue-900 mb-1">Prescription (Optional)</label>
-            <label className="border-2 border-dashed border-green-200 rounded-lg p-3 flex flex-col items-center bg-green-50 cursor-pointer">
-              <Upload size={18} className="text-green-700 mb-1" />
-              <p className="text-[10px] text-gray-500">{formData.prescriptionFile ? formData.prescriptionFile.name : 'Tap to upload'}</p>
-              <input type="file" className="hidden" onChange={(e) => updateField('prescriptionFile', e.target.files?.[0] || null)} />
-            </label>
-          </div>
-
-          <div className="flex gap-2.5">
-            <div className="flex-1">
-              <label className="block text-xs font-medium text-blue-900 mb-1">Date *</label>
-              <input type="date" min={getLocalDate()} value={formData.date || ''} onChange={(e) => updateField('date', e.target.value)} className={fieldCls('date')} />
-            </div>
-            <div className="flex-1">
-              <label className="block text-xs font-medium text-blue-900 mb-1">Time *</label>
-              <select value={formData.timeSlot || ''} onChange={(e) => updateField('timeSlot', e.target.value)} className={fieldCls('timeSlot')}>
-                <option value="">Select</option>
-                {slots.map(({ value, disabled }) => (
-                  <option key={value} value={value} disabled={disabled}>{value} {disabled ? '(Past)' : ''}</option>
-                ))}
-              </select>
-              {errors.timeSlot && <p className="text-red-500 text-[10px] mt-0.5">{errors.timeSlot}</p>}
-            </div>
-          </div>
-
-          <div className="flex gap-2 items-start py-2">
-            <input type="checkbox" checked={formData.termsChecked || false} onChange={(e) => updateField('termsChecked', e.target.checked)} className="w-4 h-4 accent-green-700 mt-0.5" />
-            <label className="text-[11px] text-gray-600">
-              I agree to the <button type="button" onClick={() => setShowTerms(true)} className="text-green-700 underline">Terms</button>
-            </label>
-          </div>
-          {errors.terms && <p className="text-red-500 text-[10px]">{errors.terms}</p>}
-
-          <div className="flex gap-3">
-            <button type="button" onClick={() => setStep(1)} className="flex-1 py-3 bg-gray-100 text-gray-600 font-semibold rounded-lg flex items-center justify-center gap-2">
-              <ArrowLeft size={16} /> Back
-            </button>
-            <button type="submit" disabled={submitting} className="flex-[2] py-3 bg-green-700 text-white font-semibold rounded-lg disabled:bg-gray-400 transition-all active:scale-[0.98]">
-              {submitting ? 'Processing...' : btnLabel}
-            </button>
+            ))}
           </div>
         </div>
-      )}
-    </form>
+
+        {errors.global && (
+          <div className="m-6 p-4 bg-red-50 border border-red-200 text-red-800 rounded-xl flex items-center gap-2 text-sm font-medium">
+            <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
+            <span>{errors.global}</span>
+          </div>
+        )}
+
+        {submitSuccess && (
+          <div className="m-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl flex items-center gap-2 text-sm font-medium">
+            <CheckCircle className="w-4 h-4 text-emerald-600" />
+            <span>Success! Data successfully committed to your database row metrics.</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="p-8 max-h-[65vh] overflow-y-auto">
+          
+          {/* STEP 1: Basic Patient Records */}
+          {activeStep === 1 && (
+            <div className="space-y-4 animate-[fadeIn_0.2s_ease-out]">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">Full Name *</label>
+                <input
+                  required type="text" value={formData.name}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Patient Name"
+                />
+                {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">Mobile Primary *</label>
+                  <input
+                    required type="tel" value={formData.mobile}
+                    onChange={(e) => setFormData({...formData, mobile: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl"
+                    placeholder="10-digit number"
+                  />
+                  {errors.mobile && <p className="text-xs text-red-500 mt-1">{errors.mobile}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">WhatsApp Communications</label>
+                  <input
+                    type="tel" value={formData.whatsapp}
+                    onChange={(e) => setFormData({...formData, whatsapp: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl"
+                    placeholder="Defaults to primary mobile if blank"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">Email Address</label>
+                <input
+                  type="email" value={formData.email}
+                  onChange={(e) => setFormData({...formData, email: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl"
+                  placeholder="name@domain.com"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">Age *</label>
+                  <input
+                    required type="number" value={formData.age}
+                    onChange={(e) => setFormData({...formData, age: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl"
+                    placeholder="Years"
+                  />
+                  {errors.age && <p className="text-xs text-red-500 mt-1">{errors.age}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">Gender *</label>
+                  <select
+                    required value={formData.gender}
+                    onChange={(e) => setFormData({...formData, gender: e.target.value as any})}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl bg-white"
+                  >
+                    <option value="">Select</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 2: Tests Aggregation & Appointment Time */}
+          {activeStep === 2 && (
+            <div className="space-y-5 animate-[fadeIn_0.2s_ease-out]">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-2">Available Diagnostics *</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 border rounded-xl">
+                  {(labInfo?.available_tests || DEFAULT_TESTS).map((testItem) => (
+                    <label key={testItem} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedTests.includes(testItem)}
+                        onChange={() => toggleTest(testItem)}
+                        className="rounded border-gray-300 text-indigo-600"
+                      />
+                      <span className="text-gray-700">{testItem}</span>
+                    </label>
+                  ))}
+                </div>
+                {errors.tests && <p className="text-xs text-red-500 mt-1">{errors.tests}</p>}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">Appointment Date *</label>
+                  <input
+                    required type="date" value={formData.appointment_date}
+                    onChange={(e) => setFormData({...formData, appointment_date: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">Time Selection *</label>
+                  <input
+                    required type="time" value={formData.time}
+                    onChange={(e) => setFormData({...formData, time: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">Booking Type</label>
+                  <select
+                    value={formData.booking_type}
+                    onChange={(e) => setFormData({...formData, booking_type: e.target.value as any})}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl bg-white"
+                  >
+                    <option value="Walk-in">Walk-in Clinic</option>
+                    <option value="Home Collection">Home Collection</option>
+                    <option value="Online">Online Consultation</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">Workflow Status</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({...formData, status: e.target.value as any})}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl bg-white"
+                  >
+                    <option value="Pending">Pending</option>
+                    <option value="Confirmed">Confirmed</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Cancelled">Cancelled</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">Prescription Document Upload</label>
+                <div className="flex items-center gap-3">
+                  <label className="flex-1 flex items-center gap-2 px-4 py-2 border-2 border-dashed rounded-xl cursor-pointer hover:bg-gray-50 text-sm text-gray-600">
+                    <Upload className="w-4 h-4 text-gray-400" />
+                    <span>Upload to storage bucket</span>
+                    <input type="file" accept="image/*,.pdf" onChange={handleFileUpload} className="hidden" />
+                  </label>
+                  {prescriptionPreview && (
+                    <div className="relative">
+                      <img src={prescriptionPreview} alt="Preview" className="w-10 h-10 object-cover rounded-lg border" />
+                      <button
+                        type="button"
+                        onClick={() => { setPrescriptionPreview(null); setPrescriptionFile(null); }}
+                        className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 3: Logistics Data Setup */}
+          {activeStep === 3 && (
+            <div className="space-y-4 animate-[fadeIn_0.2s_ease-out]">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">Address Line</label>
+                <textarea
+                  rows={2} value={formData.address_line}
+                  onChange={(e) => setFormData({...formData, address_line: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl"
+                  placeholder="Required for Home Collection setups"
+                />
+                {errors.address && <p className="text-xs text-red-500 mt-1">{errors.address}</p>}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">Pincode</label>
+                  <input
+                    type="text" value={formData.pincode}
+                    onChange={(e) => setFormData({...formData, pincode: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl"
+                    placeholder="Postal Code"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">Landmark</label>
+                  <input
+                    type="text" value={formData.landmark}
+                    onChange={(e) => setFormData({...formData, landmark: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl"
+                    placeholder="Nearby reference point"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">Remarks & Internal Notes</label>
+                <textarea
+                  rows={2} value={formData.remarks}
+                  onChange={(e) => setFormData({...formData, remarks: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl"
+                  placeholder="Additional observations..."
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Action Footer Navigation Panel */}
+          <div className="flex justify-between items-center pt-6 mt-6 border-t border-gray-100">
+            <button
+              type="button"
+              disabled={activeStep === 1}
+              onClick={() => setActiveStep(p => p - 1)}
+              className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-30"
+            >
+              Back
+            </button>
+            
+            <div className="flex gap-2">
+              {activeStep < 3 ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveStep(p => p + 1)}
+                  className="px-5 py-2 text-sm font-medium text-white rounded-xl flex items-center gap-1.5"
+                  style={{ backgroundColor: themeColor }}
+                >
+                  Next <ChevronRight className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-6 py-2 text-sm font-bold text-white rounded-xl shadow-md flex items-center gap-2 disabled:opacity-50"
+                  style={{ backgroundColor: themeColor }}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving to Workspace...
+                    </>
+                  ) : (
+                    "Register Appointment"
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
   );
-}
+};
+
+export default BookingRegistrationForm;
